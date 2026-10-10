@@ -1,7 +1,7 @@
 # Guía Definitiva: Instalación de Arch Linux en MacBook Pro 3,1 (Late 2007)
-## Modo UEFI Nativo 64-bit + Btrfs con Subvolúmenes + rEFInd + NVIDIA 340.108
+## Modo UEFI Nativo 64-bit + Btrfs (@arch, @arch-home, @arch-opt) + Swap 6GiB + rEFInd + NVIDIA 340.108
 
-Esta guía documenta el procedimiento paso a paso para instalar Arch Linux desde un Live USB de Fedora en una **MacBook Pro 3,1 (A1226 / A1260, finales de 2007)** con GPU **GeForce 8600M GT**, configurada en **modo UEFI nativo puro (sin CSM ni Hybrid MBR)**.
+Esta guía documenta el procedimiento paso a paso para instalar Arch Linux desde un Live USB de Fedora en una **MacBook Pro 3,1 (A1226 / A1260, finales de 2007)** con GPU **GeForce 8600M GT**, configurada en **modo UEFI nativo puro (sin CSM ni Hybrid MBR)**, con particionado automático y subvolúmenes Btrfs personalizados.
 
 ---
 
@@ -14,81 +14,87 @@ Abre una terminal en Fedora Live y obtén permisos de root:
 sudo -i
 ```
 
-Instala las herramientas de instalación de Arch Linux:
+Instala las herramientas de particionado y de Arch Linux en Fedora:
 ```bash
-# Fedora incluye los scripts oficiales de instalación de Arch:
-dnf install -y arch-install-scripts btrfs-progs
+dnf install -y arch-install-scripts btrfs-progs gdisk
 ```
 
 ---
 
-### 2. Particionado del Disco (GPT Puro)
-Identifica tu disco interno (usualmente `/dev/sda`):
+### 2. Particionado Automático del Disco (Asumiendo `/dev/sda`)
+Ejecuta estos comandos para particionar el disco de forma 100% automática y no interactiva con GPT puro:
+
 ```bash
-lsblk
+# 1. Limpiar completamente tablas anteriores
+sgdisk -Z /dev/sda
+
+# 2. Partición 1: EFI de 100 MiB (tipo ef00)
+sgdisk -n 1:0:+100M -t 1:ef00 -c 1:"EFI" /dev/sda
+
+# 3. Partición 2: Btrfs llenando el espacio hasta dejar 6 GiB al final (tipo 8300)
+sgdisk -n 2:0:-6G -t 2:8300 -c 2:"linux" /dev/sda
+
+# 4. Partición 3: Swap usando los 6 GiB restantes al final (tipo 8200)
+sgdisk -n 3:0:0 -t 3:8200 -c 3:"SWAP" /dev/sda
+
+# Informar al kernel de la nueva tabla
+partprobe /dev/sda
 ```
 
-Crea una tabla de particiones **GPT pura** (¡nunca MBR híbrido!):
+Verifica la estructura resultante:
 ```bash
-gdisk /dev/sda
+lsblk /dev/sda
+# /dev/sda1 -> 100M (EFI)
+# /dev/sda2 -> Resto del disco (linux)
+# /dev/sda3 -> 6G (SWAP)
 ```
-Dentro de `gdisk`:
-1. `o` -> Crea una nueva tabla GPT vacía (confirma con `y`).
-2. `n` -> Partición 1 (EFI):
-   - Primer sector: Default (Enter)
-   - Último sector: `+512M`
-   - Código de tipo: `ef00` (EFI System Partition)
-3. `n` -> Partición 2 (Btrfs Root):
-   - Primer sector: Default (Enter)
-   - Último sector: Resto del disco (Enter)
-   - Código de tipo: `8300` (Linux filesystem)
-4. `w` -> Escribe la tabla en el disco y sal (confirma con `y`).
 
 ---
 
 ### 3. Formateo y Creación de Subvolúmenes Btrfs
 
-#### 3.1. Formatear la partición EFI:
+#### 3.1. Formatear las particiones:
 ```bash
+# Partición EFI (100 MiB)
 mkfs.vfat -F32 -n "EFI" /dev/sda1
+
+# Partición Btrfs llamada "linux"
+mkfs.btrfs -f -L "linux" /dev/sda2
+
+# Partición Swap de 6 GiB y activación
+mkswap -L "swap" /dev/sda3
+swapon /dev/sda3
 ```
 
-#### 3.2. Formatear la partición Btrfs:
-```bash
-mkfs.btrfs -f -L "ARCH_ROOT" /dev/sda2
-```
-
-#### 3.3. Crear los subvolúmenes Btrfs:
+#### 3.2. Crear los subvolúmenes Btrfs (`@arch`, `@arch-home`, `@arch-opt`):
 ```bash
 # Montaje temporal de la raíz de Btrfs
 mount /dev/sda2 /mnt
 
-# Creación de subvolúmenes
-btrfs subvolume create /mnt/@
-btrfs subvolume create /mnt/@home
-btrfs subvolume create /mnt/@var
-btrfs subvolume create /mnt/@snapshots
+# Crear exactamente los subvolúmenes solicitados
+btrfs subvolume create /mnt/@arch
+btrfs subvolume create /mnt/@arch-home
+btrfs subvolume create /mnt/@arch-opt
 
-# Desmontar para remontar ordenadamente con subvolúmenes
+# Desmontar para montar la estructura final
 umount /mnt
 ```
 
-#### 3.4. Montar los subvolúmenes con compresión Zstd:
+#### 3.3. Montar los subvolúmenes y partición EFI:
 ```bash
 MOUNT_OPTS="noatime,compress=zstd:1,space_cache=v2"
 
-# Montar raíz (@)
-mount -o ${MOUNT_OPTS},subvol=@ /dev/sda2 /mnt
+# Montar raíz (@arch)
+mount -o ${MOUNT_OPTS},subvol=@arch /dev/sda2 /mnt
 
-# Crear directorios para los demás puntos de montaje
-mkdir -p /mnt/{boot,home,var,.snapshots}
+# Crear directorios de montaje
+mkdir -p /mnt/{boot,home,opt}
 
 # Montar subvolúmenes
-mount -o ${MOUNT_OPTS},subvol=@home /dev/sda2 /mnt/home
-mount -o ${MOUNT_OPTS},subvol=@var /dev/sda2 /mnt/var
-mount -o ${MOUNT_OPTS},subvol=@snapshots /dev/sda2 /mnt/.snapshots
+mount -o ${MOUNT_OPTS},subvol=@arch-home /dev/sda2 /mnt/home
+mount -o ${MOUNT_OPTS},subvol=@arch-opt /dev/sda2 /mnt/opt
 
-# Montar la partición EFI directamente en /boot
+# Montar partición EFI (100 MiB) en /boot
 mount /dev/sda1 /mnt/boot
 ```
 
@@ -101,11 +107,11 @@ pacstrap -K /mnt base base-devel linux-lts linux-lts-headers linux-firmware \
   bluez bluez-utils lm_sensors brightnessctl psmisc
 ```
 
-Genera el archivo `fstab`:
+Genera el archivo `fstab` (incluirá automáticamente `@arch`, `@arch-home`, `@arch-opt`, `/boot` y la Swap):
 ```bash
 genfstab -U /mnt >> /mnt/etc/fstab
 ```
-*(Verifica con `cat /mnt/etc/fstab` que todos los subvolúmenes y `/boot` estén presentes).*
+*(Verifica con `cat /mnt/etc/fstab`).*
 
 ---
 
@@ -121,11 +127,11 @@ ln -sf /usr/share/zoneinfo/America/Santiago /etc/localtime   # Ajusta a tu zona 
 hwclock --systohc
 
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-echo "es_CL.UTF-8 UTF-8" >> /etc/locale.gen   # O tu variante preferida
+echo "es_CL.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 
 echo "LANG=es_CL.UTF-8" > /etc/locale.conf
-echo "MiWiFi-R3600-srv" > /etc/hostname      # O el nombre de host que prefieras
+echo "MiWiFi-R3600-srv" > /etc/hostname
 ```
 
 #### 5.2. Crear usuario y configurar sudo:
@@ -133,7 +139,7 @@ echo "MiWiFi-R3600-srv" > /etc/hostname      # O el nombre de host que prefieras
 # Contraseña de root
 passwd
 
-# Crear tu usuario (ejemplo: emilio)
+# Crear tu usuario
 useradd -m -g users -G wheel,video,input,storage,power -s /bin/bash emilio
 passwd emilio
 
@@ -151,20 +157,20 @@ systemctl enable bluetooth
 ---
 
 ### 6. Instalar y Configurar el Bootloader (rEFInd)
-En MacBooks antiguas con firmware de 64 bits, **rEFInd** es el gestor de arranque EFI nativo más robusto y elegante:
+En MacBooks antiguas con firmware de 64 bits, **rEFInd** es el gestor de arranque EFI nativo ideal:
 
 ```bash
 refind-install
 ```
 
-Configura las opciones de arranque para Btrfs con subvolúmenes en `/boot/refind_linux.conf`:
+Configura las opciones de arranque para Btrfs con el subvolumen `@arch` en `/boot/refind_linux.conf`:
 ```bash
 UUID=$(blkid -s UUID -o value /dev/sda2)
 
 cat << EOF > /boot/refind_linux.conf
-"Boot using default options"     "root=UUID=${UUID} rw rootflags=subvol=@ initrd=initramfs-linux-lts.img quiet"
-"Boot into terminal"             "root=UUID=${UUID} rw rootflags=subvol=@ initrd=initramfs-linux-lts.img systemd.unit=multi-user.target"
-"Boot fallback"                  "root=UUID=${UUID} rw rootflags=subvol=@ initrd=initramfs-linux-lts-fallback.img"
+"Boot using default options"     "root=UUID=${UUID} rw rootflags=subvol=@arch initrd=initramfs-linux-lts.img quiet"
+"Boot into terminal"             "root=UUID=${UUID} rw rootflags=subvol=@arch initrd=initramfs-linux-lts.img systemd.unit=multi-user.target"
+"Boot fallback"                  "root=UUID=${UUID} rw rootflags=subvol=@arch initrd=initramfs-linux-lts-fallback.img"
 EOF
 ```
 
@@ -228,7 +234,7 @@ El script `./patch-and-install.sh`:
 2. Aplica los parches de trampolín en `os-interface.c` y `nv.c`.
 3. Parchea quirúrgicamente los 23 bloques binarios de `nv-kernel.o` (anulando los fallos de consola VGA y punteros nulos de display).
 4. Recompila con DKMS para tu kernel `linux-lts`.
-5. Deja instalada la herramienta `gpu-status` en `/usr/local/bin/gpu-status`.
+5. Deja instalada la herramienta `gpu-status` en `/usr/local/bin/gpu-status` (en inglés).
 
 ---
 
@@ -237,6 +243,7 @@ Sal del chroot y desmonta todo:
 ```bash
 exit   # Sal de arch-chroot
 umount -R /mnt
+swapoff -a
 reboot
 ```
 
@@ -246,7 +253,7 @@ Retira el pendrive de Fedora. El MacBook Pro iniciará directamente en modo UEFI
 
 # PARTE 2: Instalación del Entorno Gráfico (LXQt + LightDM)
 
-*(Realiza este paso si deseas tener escritorio gráfico. Puedes ejecutarlo inmediatamente después de reiniciar en tu sistema base).*
+*(Realiza este paso si deseas tener escritorio gráfico. Puedes ejecutarlo inmediatamente después de reiniciar en tu sistema base o cuando quieras).*
 
 ### 1. Instalar Servidor Gráfico y LXQt
 Inicia sesión como tu usuario o `root` en la consola y ejecuta:
@@ -314,7 +321,7 @@ Al iniciar sesión en LXQt, abre **QTerminal** y comprueba:
    __GL_SYNC_TO_VBLANK=0 glxgears
    # Verás ~4000 FPS procesados por hardware.
    ```
-3. **Monitoreo de estado integral:**
+3. **Monitoreo de estado integral (en inglés):**
    ```bash
    gpu-status
    # Muestra temperatura de silicio (TG0D), RPM de ventiladores, VRAM y clientes X11.
