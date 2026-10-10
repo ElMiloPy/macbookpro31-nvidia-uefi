@@ -3,7 +3,7 @@
 
 Esta guía documenta el procedimiento paso a paso para instalar Arch Linux desde un Live USB de Fedora en una **MacBook Pro 3,1 (A1226 / A1260, finales de 2007)** con GPU **GeForce 8600M GT**, configurada en **modo UEFI nativo puro (sin CSM ni Hybrid MBR)**, con particionado automático y subvolúmenes Btrfs personalizados.
 
-El kernel predeterminado del sistema es la rama **Linux 7.x** (`linux` y `linux-headers`), con soporte completo y verificado para la aceleración por hardware del driver NVIDIA 340.108 mediante shims modernos (`sysfb`, `in_hardirq`, `-fms-extensions`). Al final de la guía se incluye un **apartado opcional** para usar o mantener kernels LTS anteriores (6.18-LTS o 6.6-LTS).
+El kernel del sistema es la rama **Linux 7.x** (`linux` y `linux-headers`), con soporte completo y verificado para la aceleración por hardware del driver NVIDIA 340.108 mediante shims modernos (`sysfb`, `in_hardirq`, `-fms-extensions`).
 
 ---
 
@@ -331,36 +331,3 @@ Al iniciar sesión en LXQt, abre **QTerminal** y comprueba:
    gpu-status
    # Muestra temperatura de silicio (TG0D), RPM de ventiladores, VRAM y clientes X11.
    ```
-
----
-
-# APARTADO OPCIONAL: Uso de Kernels Anteriores (Linux 6.18-LTS / 6.6-LTS)
-
-Si por alguna razón prefieres utilizar la rama de soporte a largo plazo (LTS) en lugar del Kernel 7.x, o deseas tener ambos kernels instalados en paralelo como respaldo:
-
-### 1. Instalar el Kernel LTS
-Ejecuta:
-```bash
-sudo pacman -S --noconfirm linux-lts linux-lts-headers
-```
-*(Esto instalará `/boot/vmlinuz-linux-lts` y `/boot/initramfs-linux-lts.img` sin sobrescribir el kernel 7.x).*
-
-### 2. Registrar el Módulo NVIDIA en el Kernel LTS
-Los parches incluidos en este repositorio son 100% universales y retrocompatibles con todas las versiones de Linux. Simplemente ejecuta:
-```bash
-sudo ./patch-and-install.sh
-```
-O compila manualmente con DKMS para la versión específica:
-```bash
-sudo dkms install nvidia/340.108 -k $(pacman -Q linux-lts | awk '{print $2}')
-```
-
-### 3. Selección de Kernel al Arrancar
-* **En rEFInd**: rEFInd detecta automáticamente todos los archivos `vmlinuz-*` en `/boot`. En la pantalla de inicio verás tanto el ícono de **Linux 7.x** (`vmlinuz-linux`) como el de **Linux LTS** (`vmlinuz-linux-lts`). Puedes arrancar cualquiera de los dos con presionar `Enter`.
-* **Configuración en `/boot/refind_linux.conf`**:
-  Si deseas que ambos kernels aparezcan con nombres explícitos, puedes añadir las entradas correspondientes:
-  ```ini
-  "Boot Linux 7.x (Default)"       "root=UUID=TU-UUID rw rootflags=subvol=@arch initrd=initramfs-linux.img quiet"
-  "Boot Linux LTS"                 "root=UUID=TU-UUID rw rootflags=subvol=@arch initrd=initramfs-linux-lts.img quiet"
-  ```
-Ambos kernels funcionan con aceleración gráfica por hardware 3D completa y soporte total de sensores y control térmico.
