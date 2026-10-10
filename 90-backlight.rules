@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="smc::kbd_backlight", RUN+="/bin/chmod a+w /sys/class/leds/%k/brightness"

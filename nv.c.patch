@@ -1,0 +1,22 @@
+--- /usr/src/nvidia-340.108/nv.c.orig	2026-10-10 02:38:22.907723170 -0300
++++ /usr/src/nvidia-340.108/nv.c	2026-10-10 02:38:22.907723170 -0300
+@@ -3624,18 +3624,6 @@
+     nv_state_t *nv
+ )
+ {
+-    /* IORESOURCE_ROM_SHADOW wasn't added until 2.6.10 */
+-#if defined(IORESOURCE_ROM_SHADOW)
+-    nv_linux_state_t *nvl;
+-    struct pci_dev *dev;
+-
+-    nvl = NV_GET_NVL_FROM_NV_STATE(nv);
+-    dev = nvl->dev;
+-
+-    nv->primary_vga = ((NV_PCI_RESOURCE_FLAGS(dev, PCI_ROM_RESOURCE) &
+-        IORESOURCE_ROM_SHADOW) == IORESOURCE_ROM_SHADOW);
++    nv->primary_vga = 1;
+     return RM_OK;
+-#else
+-    return RM_ERR_NOT_SUPPORTED;
+-#endif
+ }

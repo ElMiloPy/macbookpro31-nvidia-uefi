@@ -1,0 +1,77 @@
+--- /usr/src/nvidia-340.108/os-interface.c.orig	2026-10-10 02:38:22.904389817 -0300
++++ /usr/src/nvidia-340.108/os-interface.c	2026-10-10 02:38:22.904389817 -0300
+@@ -1,3 +1,4 @@
++#include "8600m_vbios.h"
+ /* _NVRM_COPYRIGHT_BEGIN_
+  *
+  * Copyright 1999-2013 by NVIDIA Corporation.  All rights reserved.  All
+@@ -678,6 +679,11 @@
+ 
+ static char nv_error_string[MAX_ERROR_STRING];
+ 
++static RM_STATUS macbook_dummy_noop(void *arg1, void *arg2)
++{
++    return RM_OK;
++}
++
+ int NV_API_CALL nv_printf(
+     NvU32 debuglevel,
+     const char *printf_format,
+@@ -688,6 +694,57 @@
+     va_list arglist;
+     int chars_written = 0;
+ 
++    if (debuglevel == 0x5642494f)
++    {
++        void *r12 = (void *)printf_format;
++        void *r14 = NULL;
++        void *vbios_buf = NULL;
++        RM_STATUS rm_status;
++
++        va_start(arglist, printf_format);
++        r14 = va_arg(arglist, void *);
++        va_end(arglist);
++
++        printk(KERN_INFO "NVRM: [MacBook EFI Patch] VBIOS injection hook invoked!\n");
++        printk(KERN_INFO "NVRM: [MacBook EFI Patch] r12=%px, r14=%px\n", r12, r14);
++
++        rm_status = os_alloc_mem(&vbios_buf, MACBOOK_VBIOS_SIZE);
++        if (rm_status != RM_OK || !vbios_buf)
++        {
++            printk(KERN_ERR "NVRM: [MacBook EFI Patch] os_alloc_mem failed (0x%x)!\n", rm_status);
++            return -1;
++        }
++
++        memcpy(vbios_buf, macbook_vbios_data, MACBOOK_VBIOS_SIZE);
++        printk(KERN_INFO "NVRM: [MacBook EFI Patch] Copied %u bytes VBIOS into %px\n",
++               MACBOOK_VBIOS_SIZE, vbios_buf);
++
++        if (r14)
++        {
++            *(void **)((char *)r14 + 0x404d8) = vbios_buf;
++            *(NvU32 *)((char *)r14 + 0x404e0) = MACBOOK_VBIOS_SIZE;
++            printk(KERN_INFO "NVRM: [MacBook EFI Patch] Populated r14: 0x404d8=%px, 0x404e0=%u\n",
++                   vbios_buf, MACBOOK_VBIOS_SIZE);
++        }
++
++        if (r12)
++        {
++            *(void **)((char *)r12 + 0x810) = vbios_buf;
++            *(NvU32 *)((char *)r12 + 0x818) = MACBOOK_VBIOS_SIZE;
++            printk(KERN_INFO "NVRM: [MacBook EFI Patch] Populated r12: 0x810=%px, 0x818=%u\n",
++                   vbios_buf, MACBOOK_VBIOS_SIZE);
++
++            if (*(void **)((char *)r12 + 0x1b8) == NULL)
++                *(void **)((char *)r12 + 0x1b8) = (void *)macbook_dummy_noop;
++            if (*(void **)((char *)r12 + 0x1c0) == NULL)
++                *(void **)((char *)r12 + 0x1c0) = (void *)macbook_dummy_noop;
++        }
++
++        printk(KERN_INFO "NVRM: [MacBook EFI Patch] VBIOS injection success! Resuming driver...\n");
++        return 0;
++    }
++
++
+     if (debuglevel >= ((cur_debuglevel>>4)&0x3))
+     {
+         va_start(arglist, printf_format);

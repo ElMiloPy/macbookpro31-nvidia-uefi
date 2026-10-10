@@ -1,0 +1,30 @@
+#!/bin/bash
+# Real-time GPU Status Monitor for MacBook Pro 3,1 (GeForce 8600M GT)
+# Combines NVIDIA driver queries with Apple SMC thermal readings and fan statistics.
+
+echo "=========================================================="
+echo "          NVIDIA GeForce 8600M GT - Status Monitor        "
+echo "=========================================================="
+
+# 1. Driver & Hardware query
+GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo "GeForce 8600M GT")
+VRAM_TOTAL=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader 2>/dev/null || echo "255 MiB")
+VRAM_USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader 2>/dev/null || echo "N/A")
+VRAM_FREE=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader 2>/dev/null || echo "N/A")
+
+# 2. SMC GPU Temperatures & Fans
+GPU_TEMP=$(sensors 2>/dev/null | awk '/TG0D:/ {print $2}')
+HEATSINK_TEMP=$(sensors 2>/dev/null | awk '/TG0H:/ {print $2}')
+FAN_L=$(cat /sys/devices/platform/applesmc.768/fan1_output 2>/dev/null || echo "N/A")
+FAN_R=$(cat /sys/devices/platform/applesmc.768/fan2_output 2>/dev/null || echo "N/A")
+
+echo " GPU Model     : $GPU_NAME"
+echo " Driver Version: 340.108 (Native UEFI 64-bit)"
+echo " GPU Temp (Die): ${GPU_TEMP:-N/A}  (Heatsink: ${HEATSINK_TEMP:-N/A})"
+echo " Apple Fans    : Left: ${FAN_L} RPM | Right: ${FAN_R} RPM"
+echo " VRAM Usage    : $VRAM_USED / $VRAM_TOTAL (Free: $VRAM_FREE)"
+echo "=========================================================="
+echo " Active GPU / Display Clients:"
+echo "----------------------------------------------------------"
+fuser -v /dev/nvidia* 2>&1 | grep -v "^$" || echo " None"
+echo "=========================================================="
