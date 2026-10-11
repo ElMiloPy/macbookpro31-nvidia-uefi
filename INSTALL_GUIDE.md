@@ -107,7 +107,7 @@ Install modern **Linux 7.x** (`linux` and `linux-headers`) along with base syste
 
 ```bash
 pacstrap -K /mnt base base-devel linux linux-headers linux-firmware \
-  btrfs-progs networkmanager git vim sudo refind efibootmgr dkms \
+  btrfs-progs networkmanager git vim sudo grub refind efibootmgr dkms \
   bluez bluez-utils lm_sensors brightnessctl psmisc
 ```
 
@@ -160,22 +160,18 @@ systemctl enable bluetooth
 
 ---
 
-### 6. Install and Configure Bootloader (rEFInd)
-On 64-bit MacBooks, **rEFInd** is the ideal native EFI boot manager:
+### 6. Install Bootloader (GRUB + rEFInd)
+Install GRUB to automatically handle kernel parameters, initramfs, and Btrfs subvolumes, followed by rEFInd for reliable Apple EFI boot device detection:
 
 ```bash
+# 1. Install GRUB for 64-bit UEFI
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+
+# 2. Generate GRUB configuration (automatically handles UUID, @arch subvolume, and kernels)
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# 3. Install rEFInd for seamless Apple EFI boot device detection
 refind-install
-```
-
-Configure boot entries for Btrfs with `@arch` subvolume and **Kernel 7.x** in `/boot/refind_linux.conf`:
-```bash
-UUID=$(blkid -s UUID -o value /dev/sda2)
-
-cat << EOF > /boot/refind_linux.conf
-"Boot Linux 7.x (Default)"       "root=UUID=${UUID} rw rootflags=subvol=@arch initrd=initramfs-linux.img quiet"
-"Boot into terminal"             "root=UUID=${UUID} rw rootflags=subvol=@arch initrd=initramfs-linux.img systemd.unit=multi-user.target"
-"Boot fallback"                  "root=UUID=${UUID} rw rootflags=subvol=@arch initrd=initramfs-linux-fallback.img"
-EOF
 ```
 
 ---
