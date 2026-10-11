@@ -13,7 +13,7 @@ This repository contains the complete patchset, authentic extracted VBIOS ROM, a
 
 ## Quick Install (on an existing Arch Linux system)
 ```bash
-# 1. Install prerequisites (dkms, linux-lts-headers, nvidia-340xx-dkms)
+# 1. Install prerequisites (dkms, linux-headers, nvidia-340xx-dkms)
 # 2. Clone and run automated patcher:
 git clone https://github.com/ElMiloPy/macbookpro31-nvidia-uefi.git
 cd macbookpro31-nvidia-uefi
