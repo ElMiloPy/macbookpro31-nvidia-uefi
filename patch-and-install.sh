@@ -68,20 +68,13 @@ fi
 echo "[*] Step 5: Binary patching nv-kernel.o..."
 python3 "$SCRIPT_DIR/patch_nv_kernel.py" "$SRC_DIR/nv-kernel.o"
 
-echo "[*] Step 6: Installing system configurations..."
-mkdir -p /etc/X11/xorg.conf.d /etc/tmpfiles.d /etc/udev/rules.d /usr/local/bin
-cp "$SCRIPT_DIR/20-nvidia.conf" /etc/X11/xorg.conf.d/
-cp "$SCRIPT_DIR/kbd_backlight.conf" /etc/tmpfiles.d/
-cp "$SCRIPT_DIR/90-backlight.rules" /etc/udev/rules.d/
+echo "[*] Step 6: Installing GPU status monitor..."
+mkdir -p /usr/local/bin
 cp "$SCRIPT_DIR/gpu-status" /usr/local/bin/gpu-status
 chmod +x /usr/local/bin/gpu-status
 
 echo "[*] Step 7: Rebuilding and installing DKMS module for kernel $(uname -r)..."
 dkms remove nvidia/340.108 -k "$(uname -r)" 2>/dev/null || true
 IGNORE_CC_MISMATCH=1 dkms install nvidia/340.108 -k "$(uname -r)"
-
-echo "[*] Step 8: Applying permissions and backlight rules..."
-udevadm control --reload-rules && udevadm trigger || true
-systemd-tmpfiles --create /etc/tmpfiles.d/kbd_backlight.conf || true
 
 echo "=== Installation complete! Module nvidia-340.108 is ready for UEFI boot ==="

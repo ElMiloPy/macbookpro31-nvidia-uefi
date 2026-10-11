@@ -201,16 +201,13 @@ max_temp = 78
 polling_interval = 1
 ```
 
-#### 7.3. Brillo de teclado automático al 100% en el arranque:
+#### 7.3. Configuración y permisos del brillo del teclado:
+Ejecuta el script incluido en el repositorio:
 ```bash
-cat << 'EOF' > /etc/tmpfiles.d/kbd_backlight.conf
-w /sys/class/leds/smc::kbd_backlight/brightness - - - - 255
-EOF
-
-cat << 'EOF' > /etc/udev/rules.d/90-backlight.rules
-ACTION=="add", SUBSYSTEM=="leds", KERNEL=="smc::kbd_backlight", RUN+="/bin/chmod a+w /sys/class/leds/%k/brightness"
-EOF
+cd /root/macbookpro31-nvidia-uefi
+./keyboard_things.sh
 ```
+*(Esto configura el brillo al 100% al arrancar mediante `/etc/tmpfiles.d/kbd_backlight.conf` y añade las reglas udev en `/etc/udev/rules.d/90-backlight.rules` para controlar el brillo sin root).*
 
 ---
 
@@ -274,18 +271,29 @@ sudo pacman -S --noconfirm \
 
 ---
 
-### 2. Configurar LightDM para Driver Legacy NVIDIA
-Debido a que el driver 340.108 es UMS (User Mode Setting) y no KMS, debemos indicarle a LightDM que inicie el servidor Xorg sin esperar nodos DRM:
-
-Edita `/etc/lightdm/lightdm.conf` y asegúrate de configurar bajo `[LightDM]`:
-```ini
-[LightDM]
-logind-check-graphical=false
+### 2. Instalar Configuración de Xorg para NVIDIA
+Ejecuta el script del repositorio para configurar `/etc/X11/xorg.conf.d/20-nvidia.conf`:
+```bash
+cd /root/macbookpro31-nvidia-uefi
+sudo ./nvidia_xorg.sh
 ```
 
 ---
 
-### 3. Configurar Apariencia del Login (Fondo 1440x900)
+### 3. Configurar LightDM para Driver Legacy NVIDIA
+Debido a que el driver 340.108 es UMS (User Mode Setting) y no KMS, debemos indicarle a LightDM que no espere nodos DRM y habilitar el greeter:
+
+```bash
+# Indicar a LightDM no esperar nodos DRM/KMS
+sudo sed -i '/^\[LightDM\]/a logind-check-graphical=false' /etc/lightdm/lightdm.conf
+
+# Establecer lightdm-gtk-greeter como sesión de login
+sudo sed -i 's/^#\?greeter-session=.*/greeter-session=lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf
+```
+
+---
+
+### 4. Configurar Apariencia del Login (Fondo 1440x900)
 Para que el greeter se visualice nítido y centrado a la resolución nativa de 1440x900 de la pantalla:
 
 ```bash
@@ -296,7 +304,7 @@ sudo ffmpeg -y -i /usr/share/lxqt/wallpapers/appleflower.png \
   /usr/share/backgrounds/macbook_bg.png
 ```
 
-En `/etc/lightdm/lightdm-gtk-greeter.conf`:
+In `/etc/lightdm/lightdm-gtk-greeter.conf`:
 ```ini
 [greeter]
 background=/usr/share/backgrounds/macbook_bg.png
@@ -304,7 +312,7 @@ background=/usr/share/backgrounds/macbook_bg.png
 
 ---
 
-### 4. Habilitar Servicios Gráficos y Reiniciar
+### 5. Habilitar Servicios Gráficos y Reiniciar
 ```bash
 sudo systemctl enable accounts-daemon
 sudo systemctl enable lightdm
@@ -313,7 +321,7 @@ sudo systemctl restart lightdm
 
 ---
 
-### 5. Verificación de Aceleración 3D en el Escritorio
+### 6. Verificación de Aceleración 3D en el Escritorio
 Al iniciar sesión en LXQt, abre **QTerminal** y comprueba:
 
 1. **Aceleración por hardware:**
