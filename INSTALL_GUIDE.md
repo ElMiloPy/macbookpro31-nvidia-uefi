@@ -1,109 +1,109 @@
-# Guía Definitiva: Instalación de Arch Linux en MacBook Pro 3,1 (Late 2007)
-## Modo UEFI Nativo 64-bit + Kernel 7.x (Predeterminado) + Btrfs (@arch, @arch-home, @arch-opt) + Swap 6GiB + rEFInd + NVIDIA 340.108
+# Definitive Guide: Arch Linux Installation on MacBook Pro 3,1 (Late 2007)
+## Pure 64-bit Native UEFI Mode + Kernel 7.x (Default) + Btrfs (@arch, @arch-home, @arch-opt) + 6GiB Swap + rEFInd + NVIDIA 340.108
 
-Esta guía documenta el procedimiento paso a paso para instalar Arch Linux desde un Live USB de Fedora en una **MacBook Pro 3,1 (A1226 / A1260, finales de 2007)** con GPU **GeForce 8600M GT**, configurada en **modo UEFI nativo puro (sin CSM ni Hybrid MBR)**, con particionado automático y subvolúmenes Btrfs personalizados.
+This guide documents the step-by-step procedure to install Arch Linux from a Fedora Live USB on an Apple **MacBook Pro 3,1 (A1226 / A1260, Late 2007)** with **GeForce 8600M GT** GPU, configured in **pure native UEFI mode (no CSM or Hybrid MBR)**, with automated partitioning and custom Btrfs subvolumes.
 
-El kernel del sistema es la rama **Linux 7.x** (`linux` y `linux-headers`), con soporte completo y verificado para la aceleración por hardware del driver NVIDIA 340.108 mediante shims modernos (`sysfb`, `in_hardirq`, `-fms-extensions`).
+The system kernel is the **Linux 7.x** branch (`linux` and `linux-headers`), with fully verified hardware acceleration support for the NVIDIA 340.108 driver via modern compatibility shims (`sysfb`, `in_hardirq`, `-fms-extensions`).
 
 ---
 
-# PARTE 1: Instalación del Sistema Base (Solo Terminal / CLI)
+# PART 1: Base System Installation (Terminal / CLI Only)
 
-### 1. Preparar el entorno desde Fedora Live
-Inicia el MacBook Pro con el pendrive Live de Fedora (mantén presionada la tecla `Option/Alt` al encender y selecciona "EFI Boot").
-Abre una terminal en Fedora Live y obtén permisos de root:
+### 1. Prepare Environment from Fedora Live
+Boot the MacBook Pro with the Fedora Live USB (hold the `Option/Alt` key at startup and select "EFI Boot").
+Open a terminal in Fedora Live and get root privileges:
 ```bash
 sudo -i
 ```
 
-Instala las herramientas de particionado y de Arch Linux en Fedora:
+Install partitioning and Arch Linux tools in Fedora:
 ```bash
 dnf install -y arch-install-scripts btrfs-progs gdisk
 ```
 
 ---
 
-### 2. Particionado Automático del Disco (Asumiendo `/dev/sda`)
-Ejecuta estos comandos para particionar el disco de forma 100% automática y no interactiva con GPT puro:
+### 2. Automatic Disk Partitioning (Assuming `/dev/sda`)
+Run these commands to partition the disk in a 100% automated, non-interactive manner with pure GPT:
 
 ```bash
-# 1. Limpiar completamente tablas anteriores
+# 1. Wipe previous partition tables completely
 sgdisk -Z /dev/sda
 
-# 2. Partición 1: EFI de 100 MiB (tipo ef00)
-sgdisk -n 1:0:+100M -t 1:ef00 -c 1:"EFI" /dev/sda
+# 2. Partition 1: 512 MiB EFI (type ef00)
+sgdisk -n 1:0:+512M -t 1:ef00 -c 1:"EFI" /dev/sda
 
-# 3. Partición 2: Btrfs llenando el espacio hasta dejar 6 GiB al final (tipo 8300)
+# 3. Partition 2: Btrfs filling the space leaving 6 GiB at the end (type 8300)
 sgdisk -n 2:0:-6G -t 2:8300 -c 2:"linux" /dev/sda
 
-# 4. Partición 3: Swap usando los 6 GiB restantes al final (tipo 8200)
+# 4. Partition 3: Swap using the remaining 6 GiB at the end (type 8200)
 sgdisk -n 3:0:0 -t 3:8200 -c 3:"SWAP" /dev/sda
 
-# Informar al kernel de la nueva tabla
+# Inform kernel of new partition table
 partprobe /dev/sda
 ```
 
-Verifica la estructura resultante:
+Verify resulting structure:
 ```bash
 lsblk /dev/sda
-# /dev/sda1 -> 100M (EFI)
-# /dev/sda2 -> Resto del disco (linux)
+# /dev/sda1 -> 512M (EFI)
+# /dev/sda2 -> Remaining disk space (linux)
 # /dev/sda3 -> 6G (SWAP)
 ```
 
 ---
 
-### 3. Formateo y Creación de Subvolúmenes Btrfs
+### 3. Formatting and Btrfs Subvolume Creation
 
-#### 3.1. Formatear las particiones:
+#### 3.1. Format Partitions:
 ```bash
-# Partición EFI (100 MiB)
+# EFI Partition (512 MiB)
 mkfs.vfat -F32 -n "EFI" /dev/sda1
 
-# Partición Btrfs llamada "linux"
+# Btrfs partition labeled "linux"
 mkfs.btrfs -f -L "linux" /dev/sda2
 
-# Partición Swap de 6 GiB y activación
+# 6 GiB Swap partition and activation
 mkswap -L "swap" /dev/sda3
 swapon /dev/sda3
 ```
 
-#### 3.2. Crear los subvolúmenes Btrfs (`@arch`, `@arch-home`, `@arch-opt`):
+#### 3.2. Create Btrfs Subvolumes (`@arch`, `@arch-home`, `@arch-opt`):
 ```bash
-# Montaje temporal de la raíz de Btrfs
+# Temporary mount of Btrfs root
 mount /dev/sda2 /mnt
 
-# Crear exactamente los subvolúmenes solicitados
+# Create requested subvolumes
 btrfs subvolume create /mnt/@arch
 btrfs subvolume create /mnt/@arch-home
 btrfs subvolume create /mnt/@arch-opt
 
-# Desmontar para montar la estructura final
+# Unmount to assemble final structure
 umount /mnt
 ```
 
-#### 3.3. Montar los subvolúmenes y partición EFI:
+#### 3.3. Mount Subvolumes and EFI Partition:
 ```bash
 MOUNT_OPTS="noatime,compress=zstd:1,space_cache=v2"
 
-# Montar raíz (@arch)
+# Mount root (@arch)
 mount -o ${MOUNT_OPTS},subvol=@arch /dev/sda2 /mnt
 
-# Crear directorios de montaje
+# Create mount directories
 mkdir -p /mnt/{boot,home,opt}
 
-# Montar subvolúmenes
+# Mount subvolumes
 mount -o ${MOUNT_OPTS},subvol=@arch-home /dev/sda2 /mnt/home
 mount -o ${MOUNT_OPTS},subvol=@arch-opt /dev/sda2 /mnt/opt
 
-# Montar partición EFI (100 MiB) en /boot
+# Mount EFI partition in /boot
 mount /dev/sda1 /mnt/boot
 ```
 
 ---
 
-### 4. Instalación de Paquetes Base con `pacstrap` (Kernel 7.x Predeterminado)
-Instalamos el kernel moderno **Linux 7.x** (`linux` y `linux-headers`) junto a los componentes base del sistema:
+### 4. Install Base Packages with `pacstrap` (Default Kernel 7.x)
+Install modern **Linux 7.x** (`linux` and `linux-headers`) along with base system packages:
 
 ```bash
 pacstrap -K /mnt base base-devel linux linux-headers linux-firmware \
@@ -111,63 +111,63 @@ pacstrap -K /mnt base base-devel linux linux-headers linux-firmware \
   bluez bluez-utils lm_sensors brightnessctl psmisc
 ```
 
-Genera el archivo `fstab` (incluirá automáticamente `@arch`, `@arch-home`, `@arch-opt`, `/boot` y la Swap):
+Generate `/etc/fstab` (automatically includes `@arch`, `@arch-home`, `@arch-opt`, `/boot`, and Swap):
 ```bash
 genfstab -U /mnt >> /mnt/etc/fstab
 ```
-*(Verifica con `cat /mnt/etc/fstab`).*
+*(Verify with `cat /mnt/etc/fstab`).*
 
 ---
 
-### 5. Configuración del Sistema (`arch-chroot`)
-Ingresa al nuevo sistema Arch:
+### 5. System Configuration (`arch-chroot`)
+Enter the new Arch system:
 ```bash
 arch-chroot /mnt
 ```
 
-#### 5.1. Zona horaria y localización:
+#### 5.1. Timezone, Localization, and Keyboard:
 ```bash
-ln -sf /usr/share/zoneinfo/America/Santiago /etc/localtime   # Ajusta a tu zona horaria
+ln -sf /usr/share/zoneinfo/America/Santiago /etc/localtime   # Adjust to your timezone
 hwclock --systohc
 
 echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-echo "es_CL.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 
-echo "LANG=es_CL.UTF-8" > /etc/locale.conf
-echo "MiWiFi-R3600-srv" > /etc/hostname
+echo "LANG=en_US.UTF-8" > /etc/locale.conf
+echo "KEYMAP=us-intl" > /etc/vconsole.conf
+echo "mbp-arch" > /etc/hostname
 ```
 
-#### 5.2. Crear usuario y configurar sudo:
+#### 5.2. Create User and Configure Sudo:
 ```bash
-# Contraseña de root
+# Root password
 passwd
 
-# Crear tu usuario
+# Create user
 useradd -m -g users -G wheel,video,input,storage,power -s /bin/bash emilio
 passwd emilio
 
-# Habilitar permisos sudo para el grupo wheel
+# Enable sudo for wheel group
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 ```
 
-#### 5.3. Habilitar Servicios de Red y Bluetooth:
+#### 5.3. Enable Network and Bluetooth Services:
 ```bash
 systemctl enable NetworkManager
 systemctl enable bluetooth
 ```
-*(El chip Wi-Fi Atheros `ath9k` y Bluetooth vienen integrados en el kernel y se activan automáticamente).*
+*(The Atheros Wi-Fi `ath9k` chip and Bluetooth are built into the kernel and activate automatically).*
 
 ---
 
-### 6. Instalar y Configurar el Bootloader (rEFInd)
-En MacBooks antiguas con firmware de 64 bits, **rEFInd** es el gestor de arranque EFI nativo ideal:
+### 6. Install and Configure Bootloader (rEFInd)
+On 64-bit MacBooks, **rEFInd** is the ideal native EFI boot manager:
 
 ```bash
 refind-install
 ```
 
-Configura las opciones de arranque para Btrfs con el subvolumen `@arch` y el **Kernel 7.x** en `/boot/refind_linux.conf`:
+Configure boot entries for Btrfs with `@arch` subvolume and **Kernel 7.x** in `/boot/refind_linux.conf`:
 ```bash
 UUID=$(blkid -s UUID -o value /dev/sda2)
 
@@ -180,9 +180,9 @@ EOF
 
 ---
 
-### 7. Control Térmico (`mbpfan`) y Brillo del Teclado
+### 7. Thermal Management (`mbpfan`) and Keyboard Backlight
 
-#### 7.1. Compilar e instalar `mbpfan`:
+#### 7.1. Compile and install `mbpfan`:
 ```bash
 cd /tmp
 git clone https://github.com/linux-on-mac/mbpfan.git
@@ -192,7 +192,7 @@ cp mbpfan.service /etc/systemd/system/
 systemctl enable mbpfan
 ```
 
-#### 7.2. Configuración de ventiladores en `/etc/mbpfan.conf`:
+#### 7.2. Fan configuration in `/etc/mbpfan.conf`:
 ```ini
 [general]
 low_temp = 55
@@ -201,19 +201,19 @@ max_temp = 78
 polling_interval = 1
 ```
 
-#### 7.3. Configuración y permisos del brillo del teclado:
-Ejecuta el script incluido en el repositorio:
+#### 7.3. Keyboard backlight configuration and permissions:
+Run the script included in the repository:
 ```bash
 cd /root/macbookpro31-nvidia-uefi
 ./keyboard_things.sh
 ```
-*(Esto configura el brillo al 100% al arrancar mediante `/etc/tmpfiles.d/kbd_backlight.conf` y añade las reglas udev en `/etc/udev/rules.d/90-backlight.rules` para controlar el brillo sin root).*
+*(This sets keyboard backlight to 100% on boot via `/etc/tmpfiles.d/kbd_backlight.conf` and installs udev rules in `/etc/udev/rules.d/90-backlight.rules` for non-root brightness control).*
 
 ---
 
-### 8. Instalar y Parchear el Driver NVIDIA 340.108 (UEFI Nativo + Kernel 7.x)
+### 8. Install and Patch NVIDIA 340.108 Driver (Native UEFI + Kernel 7.x)
 
-Como tu usuario normal (`emilio`), compila el paquete `nvidia-340xx-dkms` desde AUR:
+As your normal user (`emilio`), build the `nvidia-340xx-dkms` package from AUR:
 ```bash
 su - emilio
 git clone https://aur.archlinux.org/nvidia-340xx-dkms.git
@@ -222,7 +222,7 @@ makepkg -sirc --noconfirm
 exit
 ```
 
-Ahora clona tu repositorio de GitHub con los parches automatizados e instálalos:
+Now clone this repository with the automated patcher and install it:
 ```bash
 cd /root
 git clone https://github.com/ElMiloPy/macbookpro31-nvidia-uefi.git
@@ -230,40 +230,41 @@ cd macbookpro31-nvidia-uefi
 ./patch-and-install.sh
 ```
 
-El script `./patch-and-install.sh`:
-1. Copia el VBIOS auténtico extraído (`8600m_vbios.h`) a `/usr/src/nvidia-340.108/`.
-2. Aplica los parches de trampolín en `os-interface.c` y `nv.c`.
-3. Inyecta los shims de compatibilidad para **Kernel 7.x** (`sysfb_primary_display`, `in_hardirq`, `-fms-extensions` para GCC 16 y headers de `conftest`).
-4. Parchea quirúrgicamente los 23 bloques binarios de `nv-kernel.o` (anulando los fallos de consola VGA y punteros nulos de display).
-5. Compila e instala el módulo con DKMS para tu kernel en ejecución.
-6. Deja instalada la herramienta `gpu-status` en `/usr/local/bin/gpu-status` (en inglés).
+The `./patch-and-install.sh` script performs the following:
+1. Copies the authentic extracted VBIOS (`8600m_vbios.h`) to `/usr/src/nvidia-340.108/`.
+2. Applies trampoline hook patches in `os-interface.c` and `nv.c`.
+3. Injects compatibility shims for **Kernel 7.x** (`sysfb_primary_display`, `in_hardirq`, `-fms-extensions` for GCC 16, and `conftest` headers).
+4. Surgically patches all 23 binary chunks in `nv-kernel.o` (bypassing VGA console checks and display null-pointer traps).
+5. Compiles and installs the module with DKMS for your running kernel.
+6. Installs the `gpu-status` monitoring tool to `/usr/local/bin/gpu-status`.
 
 ---
 
-### 9. Finalizar y Reiniciar
-Sal del chroot y desmonta todo:
+### 9. Finish and Reboot
+Exit the chroot and unmount everything:
 ```bash
-exit   # Sal de arch-chroot
+exit   # Exit arch-chroot
 umount -R /mnt
 swapoff -a
 reboot
 ```
 
-Retira el pendrive de Fedora. El MacBook Pro iniciará directamente en modo UEFI nativo con rEFInd y tu instalación base limpia de Arch Linux corriendo el **Kernel 7.x**.
+Remove the Fedora USB drive. The MacBook Pro will boot directly in native UEFI mode with rEFInd and a clean Arch Linux base installation running **Kernel 7.x**.
 
 ---
 
-# PARTE 2: Instalación del Entorno Gráfico (LXQt + LightDM)
+# PART 2: Desktop Environment Installation (LXQt + LightDM)
 
-*(Realiza este paso si deseas tener escritorio gráfico. Puedes ejecutarlo inmediatamente después de reiniciar en tu sistema base o cuando quieras).*
+*(Perform this step if you want a graphical desktop environment. You can run it immediately after rebooting into your base system or at any time).*
 
-### 1. Instalar Servidor Gráfico y LXQt
-Inicia sesión como tu usuario o `root` en la consola y ejecuta:
+### 1. Install Display Server and LXQt
+Log in as your user or `root` in the console and run:
 ```bash
 sudo pacman -S --noconfirm \
   xorg-server xorg-xinit \
   lxqt openbox \
   lightdm lightdm-gtk-greeter accountsservice \
+  network-manager-applet blueman \
   qterminal pcmanfm-qt \
   mesa-utils mesa-demos \
   ffmpeg
@@ -271,8 +272,8 @@ sudo pacman -S --noconfirm \
 
 ---
 
-### 2. Instalar Configuración de Xorg para NVIDIA
-Ejecuta el script del repositorio para configurar `/etc/X11/xorg.conf.d/20-nvidia.conf`:
+### 2. Install NVIDIA Xorg Configuration
+Run the script from the repository to configure `/etc/X11/xorg.conf.d/20-nvidia.conf`:
 ```bash
 cd /root/macbookpro31-nvidia-uefi
 sudo ./nvidia_xorg.sh
@@ -280,25 +281,25 @@ sudo ./nvidia_xorg.sh
 
 ---
 
-### 3. Configurar LightDM para Driver Legacy NVIDIA
-Debido a que el driver 340.108 es UMS (User Mode Setting) y no KMS, debemos indicarle a LightDM que no espere nodos DRM y habilitar el greeter:
+### 3. Configure LightDM for NVIDIA Legacy Driver and GTK Greeter
+Because the 340.108 driver uses UMS (User Mode Setting) rather than KMS, we must instruct LightDM not to wait for DRM device nodes, and explicitly set the GTK greeter:
 
 ```bash
-# Indicar a LightDM no esperar nodos DRM/KMS
+# Instruct LightDM not to wait for DRM/KMS device nodes
 sudo sed -i '/^\[LightDM\]/a logind-check-graphical=false' /etc/lightdm/lightdm.conf
 
-# Establecer lightdm-gtk-greeter como sesión de login
+# Set lightdm-gtk-greeter as active greeter
 sudo sed -i 's/^#\?greeter-session=.*/greeter-session=lightdm-gtk-greeter/' /etc/lightdm/lightdm.conf
 ```
 
 ---
 
-### 4. Configurar Apariencia del Login (Fondo 1440x900)
-Para que el greeter se visualice nítido y centrado a la resolución nativa de 1440x900 de la pantalla:
+### 4. Configure Login Screen Appearance (1440x900 Wallpaper)
+To render the greeter sharply at the native 1440x900 resolution:
 
 ```bash
 sudo mkdir -p /usr/share/backgrounds
-# Puedes usar un fondo de LXQt reescalado a la resolución nativa:
+# Scale an LXQt wallpaper to native resolution:
 sudo ffmpeg -y -i /usr/share/lxqt/wallpapers/appleflower.png \
   -vf "scale=1440:900:force_original_aspect_ratio=increase,crop=1440:900" \
   /usr/share/backgrounds/macbook_bg.png
@@ -312,7 +313,7 @@ background=/usr/share/backgrounds/macbook_bg.png
 
 ---
 
-### 5. Habilitar Servicios Gráficos y Reiniciar
+### 5. Enable Graphical Services and Start LightDM
 ```bash
 sudo systemctl enable accounts-daemon
 sudo systemctl enable lightdm
@@ -321,21 +322,21 @@ sudo systemctl restart lightdm
 
 ---
 
-### 6. Verificación de Aceleración 3D en el Escritorio
-Al iniciar sesión en LXQt, abre **QTerminal** y comprueba:
+### 6. Verify 3D Hardware Acceleration on Desktop
+Once logged into LXQt, open **QTerminal** and verify:
 
-1. **Aceleración por hardware:**
+1. **Hardware Acceleration:**
    ```bash
    glxinfo -B
-   # Verás: direct rendering: Yes | OpenGL renderer: GeForce 8600M GT
+   # Output: direct rendering: Yes | OpenGL renderer: GeForce 8600M GT
    ```
-2. **Fotogramas por segundo:**
+2. **Framerate:**
    ```bash
    __GL_SYNC_TO_VBLANK=0 glxgears
-   # Verás ~4000 FPS procesados por hardware.
+   # Output: ~4000 FPS hardware rendered
    ```
-3. **Monitoreo de estado integral (en inglés):**
+3. **Comprehensive Hardware Status:**
    ```bash
    gpu-status
-   # Muestra temperatura de silicio (TG0D), RPM de ventiladores, VRAM y clientes X11.
+   # Displays silicon die temperature (TG0D), SMC fan speeds, VRAM, and active X11 clients.
    ```

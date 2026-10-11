@@ -32,3 +32,5 @@ sudo ./patch-and-install.sh
 - `90-backlight.rules`: Udev permission rules for unprivileged brightness control.
 - `gpu-status`: CLI hardware status monitor.
 - `patch-and-install.sh`: All-in-one patcher and DKMS build script.
+- `keyboard_things.sh`: Keyboard backlight setup and udev permissions script.
+- `nvidia_xorg.sh`: NVIDIA Xorg configuration installer script.
